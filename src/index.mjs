@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createScoreServer } from './server.mjs';
 import { DISCOVERY_PORT, startDiscovery } from './discovery.mjs';
+import { prepareWindowsNetwork } from './windows-network.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const port = Number(process.env.SCORE_PORT ?? 3080);
@@ -11,6 +12,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('SCORE_
 const host = process.env.SCORE_HOST ?? '0.0.0.0';
 const discoveryPort = Number(process.env.SCORE_DISCOVERY_PORT ?? DISCOVERY_PORT);
 if (!Number.isInteger(discoveryPort) || discoveryPort < 1 || discoveryPort > 65535) throw new Error('SCORE_DISCOVERY_PORT must be between 1 and 65535');
+prepareWindowsNetwork({ httpPort: port, discoveryPort });
 const databasePath = path.resolve(process.env.SCORE_DB_PATH ?? path.join(root, 'data/scores.sqlite'));
 mkdirSync(path.dirname(databasePath), { recursive: true });
 const server = createScoreServer({ databasePath });
