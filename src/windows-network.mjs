@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 // Elevate only the firewall helper. The HTTP server itself stays under the
 // original user's account, and the rules accept traffic only from the LAN.
 export function prepareWindowsNetwork({ httpPort, discoveryPort }) {
-  if (process.platform !== 'win32') return;
+  if (process.platform !== 'win32' || process.env.KOSEN_SERVER_NETWORK_READY === '1') return;
   const script = fileURLToPath(new URL('../scripts/windows-firewall.ps1', import.meta.url));
   const args = ['-NodePath', process.execPath, '-HttpPort', String(httpPort), '-DiscoveryPort', String(discoveryPort)];
   const powershell = 'powershell.exe';
