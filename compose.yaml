@@ -1,0 +1,12 @@
+services:
+  score-server:
+    build: .
+    ports:
+      - "3080:3080"
+      - "42044:42044/udp"
+    volumes:
+      - score-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  score-data:
