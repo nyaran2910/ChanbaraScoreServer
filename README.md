@@ -7,8 +7,8 @@ LAN内のUnityからHTTPでランキング取得・登録を行い、ホストPC
 Node.js 24以上を用意し、このリポジトリを取得して起動します。追加npmパッケージのインストールは不要です。
 
 ```sh
-git clone https://github.com/nyaran2910/KosenChanbaraScoreServer.git
-cd KosenChanbaraScoreServer
+git clone https://github.com/nyaran2910/ChanbaraScoreServer.git
+cd ChanbaraScoreServer
 npm start
 ```
 
