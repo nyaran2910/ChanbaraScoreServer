@@ -6,7 +6,7 @@ class RequestError extends Error {
 }
 
 function difficulty(value) {
-  if (value !== 'easy' && value !== 'normal') throw new RequestError(400, 'difficulty must be easy or normal');
+  if (value !== 'easy' && value !== 'normal' && value !== 'hard') throw new RequestError(400, 'difficulty must be easy, normal or hard');
   return value;
 }
 

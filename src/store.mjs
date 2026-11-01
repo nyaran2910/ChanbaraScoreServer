@@ -14,13 +14,35 @@ export class ScoreStore {
         run_id TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
         defeated INTEGER NOT NULL CHECK (defeated BETWEEN 0 AND 100),
-        difficulty TEXT NOT NULL CHECK (difficulty IN ('easy', 'normal')),
+        difficulty TEXT NOT NULL CHECK (difficulty IN ('easy', 'normal', 'hard')),
         created_at TEXT NOT NULL
       ) STRICT;
       CREATE INDEX IF NOT EXISTS scores_ranking
         ON scores (difficulty, defeated DESC, sequence ASC);
       CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
     `);
+    // Upgrade existing two-mode databases without losing runs, ordering or server identity.
+    const schema = this.db.prepare("SELECT sql FROM sqlite_master WHERE name = 'scores'").get().sql;
+    if (!schema.includes("'hard'")) {
+      this.db.exec(`
+        BEGIN IMMEDIATE;
+        DROP INDEX scores_ranking;
+        ALTER TABLE scores RENAME TO scores_legacy;
+        CREATE TABLE scores (
+          sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+          run_id TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          defeated INTEGER NOT NULL CHECK (defeated BETWEEN 0 AND 100),
+          difficulty TEXT NOT NULL CHECK (difficulty IN ('easy', 'normal', 'hard')),
+          created_at TEXT NOT NULL
+        ) STRICT;
+        INSERT INTO scores SELECT sequence, run_id, name, defeated,
+          CASE difficulty WHEN 'easy' THEN 'normal' ELSE 'hard' END, created_at FROM scores_legacy;
+        DROP TABLE scores_legacy;
+        CREATE INDEX scores_ranking ON scores (difficulty, defeated DESC, sequence ASC);
+        COMMIT;
+      `);
+    }
     this.db.prepare('INSERT OR IGNORE INTO metadata (key, value) VALUES (?, ?)').run('server_id', randomUUID());
     this.serverId = this.db.prepare('SELECT value FROM metadata WHERE key = ?').get('server_id').value;
     this.topQuery = this.db.prepare(`

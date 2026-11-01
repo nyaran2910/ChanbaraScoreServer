@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
 import test from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
 import { createScoreServer } from '../src/server.mjs';
 
 async function start(t, databasePath) {
@@ -85,7 +86,7 @@ test('invalid scores, names, identifiers, JSON and oversized requests are reject
   for (const score of [-1, 101, 1.5, '10', null]) assert.equal((await api.submit(score)).status, 400);
   for (const name of ['', '   ', 'あ'.repeat(13), '行\n替え', '不可\u200b視', '不可\ud800']) assert.equal((await api.submit(4, { name })).status, 400);
   assert.equal((await api.submit(4, { runId: 'bad' })).status, 400);
-  assert.equal((await api.submit(4, { difficulty: 'hard' })).status, 400);
+  assert.equal((await api.submit(4, { difficulty: 'invalid' })).status, 400);
   for (const body of ['{', 'null', '[]']) {
     assert.equal((await api.request('/api/scores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })).status, 400);
   }
@@ -116,4 +117,39 @@ test('names are normalized and SQL-looking input stays data', async t => {
   assert.equal(result.body.entry.name, 'Abc');
   assert.equal((await api.submit(33, { name: "'; DROP --" })).status, 201);
   assert.equal((await api.request('/api/scores?difficulty=normal')).body.entries.length, 2);
+});
+
+
+test('hard mode has an independent leaderboard', async t => {
+  const api = await start(t);
+  assert.equal((await api.submit(50, { difficulty: 'hard' })).status, 201);
+  assert.equal((await api.request('/api/scores?difficulty=hard')).body.entries.length, 1);
+  assert.equal((await api.request('/api/scores?difficulty=normal')).body.entries.length, 0);
+});
+
+
+test('legacy two-mode database migrates records and preserves server identity', async t => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'score-migration-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const filename = path.join(directory, 'scores.sqlite');
+  const db = new DatabaseSync(filename);
+  db.exec(`CREATE TABLE scores (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL, defeated INTEGER NOT NULL,
+    difficulty TEXT NOT NULL CHECK (difficulty IN ('easy', 'normal')), created_at TEXT NOT NULL
+  ) STRICT;
+  CREATE INDEX scores_ranking ON scores (difficulty, defeated DESC, sequence ASC);
+  CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;`);
+  const serverId = randomUUID();
+  db.prepare('INSERT INTO metadata VALUES (?, ?)').run('server_id', serverId);
+  const insert = db.prepare('INSERT INTO scores (run_id,name,defeated,difficulty,created_at) VALUES (?,?,?,?,?)');
+  insert.run(randomUUID(), '旧イージー', 10, 'easy', '2026-10-16');
+  insert.run(randomUUID(), '旧ノーマル', 20, 'normal', '2026-10-16');
+  db.close();
+  const api = await start(t, filename);
+  assert.equal(api.serverId, serverId);
+  assert.equal((await api.request('/api/scores?difficulty=normal')).body.entries[0].name, '旧イージー');
+  assert.equal((await api.request('/api/scores?difficulty=hard')).body.entries[0].name, '旧ノーマル');
+  assert.equal((await api.request('/api/scores?difficulty=easy')).body.entries.length, 0);
+  assert.equal((await api.submit(5, { difficulty: 'hard' })).status, 201);
 });
